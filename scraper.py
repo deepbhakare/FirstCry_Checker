@@ -22,7 +22,7 @@ PINCODE = "411014"
 # ── Listing pages (monitors entire brand pages for NEW arrivals) ──────────────
 LISTING_URLS = {
     "Hot Wheels": "https://www.firstcry.com/hotwheels/5/0/113?sort=popularity&q=ard-hot%20wheels&ref2=q_ard_hot%20wheels&asid=53241",
-    "Majorette":  "https://www.firstcry.com/Majorette/0/0/1335?q=as_Majorette&asid=48297",
+    "Majorette": "https://www.firstcry.com/Majorette/0/0/1335?q=as_Majorette&asid=48297",
 }
 
 # ── Individual product pages (monitors specific out-of-stock cars) ────────────
@@ -30,18 +30,43 @@ LISTING_URLS = {
 # Format:  "Your Label": "https://www.firstcry.com/...product-detail"
 WATCH_PRODUCTS = {
     "HW Ferrari F40 Competizione Red": "https://www.firstcry.com/hot-wheels/hot-wheels-ferrari-f40-competizione-198-250-toy-car-red/21965916/product-detail",
-
-    # ↓↓ ADD MORE CARS BELOW THIS LINE ↓↓
-    # "HW Bone Shaker": "https://www.firstcry.com/...product-detail",
-    # "Majorette Porsche 911": "https://www.firstcry.com/...product-detail",
+    "HW McLaren Formula 1 Team 4": "https://www.firstcry.com/hot-wheels/hot-wheels-mclaren-formula-1-team-4-formula-one-premium-die-cast-car-anthracite-black-and-yellow/22115543/product-detail",
+    "HW Mercedes-Benz 300 SEL 6.8 AMG": "https://www.firstcry.com/hot-wheels/hot-wheels-mercedes-benz-300-sel-6-8-amg-die-cast-toy-car-black/22140896/product-detail",
+    "HW Honda Civic Custom STSTH Personalise": "https://www.firstcry.com/hot-wheels/hot-wheels-73-honda-civic-custom-personnalise-car-231-250-maroon/22140905/product-detail",
+    "HW Nissan 35GT RR Ver 2": "https://www.firstcry.com/hot-wheels/hot-wheels-die-cast-lb-silhouette-works-gt-nissan-35gt-rr-ver-2-car-toy-silver/22140906/product-detail",
+    "HW Mercedes-AMG Petronas F1 Team": "https://www.firstcry.com/hot-wheels/hot-wheels-premium-2025-mercedes-amg-petronas-f1-team-car-black-and-green/22157119/product-detail",
+    "HW Visa Cash App Racing Bulls F1 Team": "https://www.firstcry.com/hot-wheels/hot-wheels-premium-2025-visa-cash-app-racing-bulls-f1-team-car-black-and-white/22157138/product-detail",
+    "HW Ferrari Team Transport": "https://www.firstcry.com/hot-wheels/hot-wheels-second-story-lorry-die-cast-free-wheel-car-transport-truck-red/22159210/product-detail",
+    "HW Ford Mustang Dark Horse": "https://www.firstcry.com/hot-wheels/hot-wheels-ford-mustang-dark-horse-250-250-die-cast-toy-car-blue/22178581/product-detail",
+    "HW Toyota Supra 232-250": "https://www.firstcry.com/hot-wheels/hot-wheels-toyota-supra-232-250-die-cast-toy-car-green/22178925/product-detail",
+    "HW McLaren P1": "https://www.firstcry.com/hot-wheels/hot-wheels-mclaren-p1-165-250-die-cast-toy-car-maroon/22179292/product-detail",
+    "HW McLaren F1": "https://www.firstcry.com/hot-wheels/hot-wheels-mclaren-f1-243-250-die-cast-toy-car-red/22189703/product-detail",
+    "HW STH STH Ford Sierra Cosworth": "https://www.firstcry.com/hot-wheels/hot-wheels-87-ford-sierra-cosworth-116-250-toy-car-dark-pink/22240154/product-detail",
+    "HW Ferrari F40 Competizione Black": "https://www.firstcry.com/hot-wheels/hot-wheels-ferrari-f40-competizione-63-250-toy-car-black/22240147/product-detail",
+    "HW Visa Cash App Racing Bulls F1 Team": "https://www.firstcry.com/hot-wheels/hot-wheels-visa-cash-app-racing-bulls-formula-1-team-equipe-68-250-toy-car-white-and-black/22240176/product-detail",
+    "HW Lamborghini Huracan Coupe": "https://www.firstcry.com/hot-wheels/hot-wheels-lb-works-lamborghini-huracan-coupe-91-250-toy-car-black/22240182/product-detail",
+    "Majorette Porsche 911 GT3 Cup Edition": "https://www.firstcry.com/majorette/majorette-1-64-scale-porsche-911-gt3-cup-edition-free-wheel-die-cast-car-green/19931378/product-detail",
+    "Majorette Porsche 911 Carrera RS BLACK": "https://www.firstcry.com/majorette/majorette-porsche-racing-die-cast-free-wheel-model-toy-car-black/19991405/product-detail",
+    "CHASE-Majorette Ford F-150 Raptor": "https://www.firstcry.com/majorette/majorette-ford-f-150-raptor-showroom-premium-die-cast-car-blue/22063291/product-detail",
+    "Majorette BMW M3": "https://www.firstcry.com/majorette/majorette-bmw-m3-showroom-premium-die-cast-car-green/22063292/product-detail",
+    "Majorette Aston Martin Vantage GTB": "https://www.firstcry.com/majorette/majorette-aston-martin-vantage-gtb-showroom-premium-die-cast-car-white/22063293/product-detail",
+    "Majorette Land Rover Defender 90": "https://www.firstcry.com/majorette/majorette-land-rover-defender-90-showroom-premium-die-cast-car-silver/22063301/product-detail",
+    "Majorette Lamborghini Huracan Avio": "https://www.firstcry.com/majorette/majorette-lamborghini-huracan-avio-showroom-premium-die-cast-car-black/22063303/product-detail",
+    "Majorette Toyota Supra JZabo JDM Legends Deluxe": "https://www.firstcry.com/majorette/majorette-toyota-supra-jzabo-jdm-legends-deluxe-die-cast-toy-car-royal-blue-and-lime-green/22063306/product-detail",
+    "CHASE-Majorette Nissan Cefiro A31 JDM Legends Deluxe": "https://www.firstcry.com/majorette/majorette-nissan-cefiro-a31-jdm-legends-deluxe-die-cast-car-dark-pink/22063307/product-detail",
+    "Majorette Porsche 911 Carrera RS BLUE": "https://www.firstcry.com/majorette/majorette-porsche-911-carrera-rs-2-7-castheads-premium-die-cast-free-wheel-moving-cars-light-blue/22064343/product-detail",
+    "Majorette Toyota Century JDM Legends Premium": "https://www.firstcry.com/majorette/majorette-toyota-century-jdm-legends-premium-die-cast-car-grey/22064404/product-detail",
+    "Majorette BMW M3 VINTAGE BLACK PREMIUM": "https://www.firstcry.com/majorette/majorette-bmw-m3-vintage-premium-die-cast-car-black/22064424/product-detail",
+    "Majorette Mercedes-Benz 450 SEL VINTAGE PREMIUM": "https://www.firstcry.com/majorette/majorette-mercedes-benz-450-sel-vintage-premium-die-cast-car-light-green/22064428/product-detail",
+    "Majorette Aston Martin CHROME Vantage GTB SHOWROOM DELUXE": "https://www.firstcry.com/majorette/majorette-aston-martin-vantage-gtb-showroom-deluxe-die-cast-car-green/22069192/product-detail",
 }
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # Email (Gmail recommended — use an App Password)
-EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")
+EMAIL_SENDER = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 
@@ -61,22 +86,27 @@ HEADERS = {
 
 # ─── STATE MANAGEMENT ─────────────────────────────────────────────────────────
 
+
 def load_seen() -> dict:
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE) as f:
             return json.load(f)
     return {}
 
+
 def save_seen(data: dict):
     with open(STATE_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
+
 # ─── SCRAPING ─────────────────────────────────────────────────────────────────
+
 
 def product_id(product: dict) -> str:
     """Stable unique key for a product."""
     raw = (product.get("id") or product.get("url") or product.get("name", "")).strip()
     return hashlib.md5(raw.encode()).hexdigest()
+
 
 def fetch_page(url: str) -> str | None:
     try:
@@ -111,15 +141,23 @@ def parse_products(html: str, brand: str) -> list[dict]:
         if "__NEXT_DATA__" in text or "window.__INITIAL_STATE__" in text:
             try:
                 # Extract JSON blob
-                match = re.search(r'__NEXT_DATA__\s*=\s*(\{.*?\});?\s*</script>', text, re.DOTALL)
+                match = re.search(
+                    r"__NEXT_DATA__\s*=\s*(\{.*?\});?\s*</script>", text, re.DOTALL
+                )
                 if not match:
-                    match = re.search(r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*;', text, re.DOTALL)
+                    match = re.search(
+                        r"window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*;",
+                        text,
+                        re.DOTALL,
+                    )
                 if match:
                     data = json.loads(match.group(1))
                     # Try to walk to product list — path varies
                     items = _find_products_in_json(data)
                     if items:
-                        print(f"[INFO] Found {len(items)} products via embedded JSON for {brand}")
+                        print(
+                            f"[INFO] Found {len(items)} products via embedded JSON for {brand}"
+                        )
                         return items
             except Exception as e:
                 print(f"[WARN] JSON parse error: {e}")
@@ -127,7 +165,7 @@ def parse_products(html: str, brand: str) -> list[dict]:
     # ── Strategy 2: HTML product cards
     # FirstCry uses various class names across versions
     card_selectors = [
-        {"data-prd-id": True},       # attribute selector
+        {"data-prd-id": True},  # attribute selector
     ]
 
     # Try data-prd-id attribute (common in FirstCry)
@@ -135,26 +173,40 @@ def parse_products(html: str, brand: str) -> list[dict]:
     if cards:
         for card in cards:
             pid = card.get("data-prd-id", "")
-            name_el = card.find(class_=re.compile(r'product.?name|prd.?name|title', re.I))
-            name = name_el.get_text(strip=True) if name_el else card.get("data-prd-name", "")
-            price_el = card.find(class_=re.compile(r'price|selling.?price', re.I))
+            name_el = card.find(
+                class_=re.compile(r"product.?name|prd.?name|title", re.I)
+            )
+            name = (
+                name_el.get_text(strip=True)
+                if name_el
+                else card.get("data-prd-name", "")
+            )
+            price_el = card.find(class_=re.compile(r"price|selling.?price", re.I))
             price = price_el.get_text(strip=True) if price_el else ""
             link_el = card.find("a", href=True)
-            url = "https://www.firstcry.com" + link_el["href"] if link_el and link_el["href"].startswith("/") else (link_el["href"] if link_el else "")
+            url = (
+                "https://www.firstcry.com" + link_el["href"]
+                if link_el and link_el["href"].startswith("/")
+                else (link_el["href"] if link_el else "")
+            )
 
             # Check availability — look for "Out of Stock" text or button
-            out_of_stock = bool(card.find(string=re.compile(r"out of stock|notify me", re.I)))
+            out_of_stock = bool(
+                card.find(string=re.compile(r"out of stock|notify me", re.I))
+            )
             in_stock = not out_of_stock
 
             if name or pid:
-                products.append({
-                    "id": pid,
-                    "name": name,
-                    "price": price,
-                    "url": url,
-                    "in_stock": in_stock,
-                    "brand": brand,
-                })
+                products.append(
+                    {
+                        "id": pid,
+                        "name": name,
+                        "price": price,
+                        "url": url,
+                        "in_stock": in_stock,
+                        "brand": brand,
+                    }
+                )
         if products:
             print(f"[INFO] Found {len(products)} products via HTML cards for {brand}")
             return products
@@ -169,20 +221,30 @@ def parse_products(html: str, brand: str) -> list[dict]:
         seen_hrefs.add(href)
         name = link.get_text(strip=True)
         if len(name) < 5:  # skip nav/icon links
-            name_el = link.find(class_=re.compile(r'name|title', re.I))
+            name_el = link.find(class_=re.compile(r"name|title", re.I))
             name = name_el.get_text(strip=True) if name_el else ""
         if not name:
             continue
         full_url = "https://www.firstcry.com" + href if href.startswith("/") else href
-        out_of_stock = bool(link.find_parent().find(string=re.compile(r"out of stock", re.I))) if link.find_parent() else False
-        products.append({
-            "id": re.search(r'/(\d{7,})', href).group(1) if re.search(r'/(\d{7,})', href) else href,
-            "name": name,
-            "price": "",
-            "url": full_url,
-            "in_stock": not out_of_stock,
-            "brand": brand,
-        })
+        out_of_stock = (
+            bool(link.find_parent().find(string=re.compile(r"out of stock", re.I)))
+            if link.find_parent()
+            else False
+        )
+        products.append(
+            {
+                "id": (
+                    re.search(r"/(\d{7,})", href).group(1)
+                    if re.search(r"/(\d{7,})", href)
+                    else href
+                ),
+                "name": name,
+                "price": "",
+                "url": full_url,
+                "in_stock": not out_of_stock,
+                "brand": brand,
+            }
+        )
 
     print(f"[INFO] Found {len(products)} products via link scan for {brand}")
     return products
@@ -205,18 +267,24 @@ def parse_single_product(html: str, label: str, url: str) -> dict | None:
 
     # Extract price
     price = ""
-    price_el = soup.find(class_=re.compile(r'selling.?price|final.?price|prd.?price', re.I))
+    price_el = soup.find(
+        class_=re.compile(r"selling.?price|final.?price|prd.?price", re.I)
+    )
     if not price_el:
-        price_el = soup.find(string=re.compile(r'₹\s*\d+'))
+        price_el = soup.find(string=re.compile(r"₹\s*\d+"))
     if price_el:
-        price_text = price_el.get_text(strip=True) if hasattr(price_el, 'get_text') else str(price_el)
-        price_match = re.search(r'[\d,]+', price_text.replace('₹', ''))
-        price = price_match.group().replace(',', '') if price_match else ""
+        price_text = (
+            price_el.get_text(strip=True)
+            if hasattr(price_el, "get_text")
+            else str(price_el)
+        )
+        price_match = re.search(r"[\d,]+", price_text.replace("₹", ""))
+        price = price_match.group().replace(",", "") if price_match else ""
 
     # Detect stock status — look for "Notify Me" button or "Add to Cart"
     page_text = soup.get_text()
-    notify_me  = bool(re.search(r'notify\s*me', page_text, re.I))
-    add_to_cart = bool(re.search(r'add\s*to\s*(cart|bag)', page_text, re.I))
+    notify_me = bool(re.search(r"notify\s*me", page_text, re.I))
+    add_to_cart = bool(re.search(r"add\s*to\s*(cart|bag)", page_text, re.I))
 
     # "Add to Cart" present and "Notify Me" absent = in stock
     if add_to_cart and not notify_me:
@@ -225,16 +293,22 @@ def parse_single_product(html: str, label: str, url: str) -> dict | None:
         in_stock = False
     else:
         # Ambiguous — check button elements specifically
-        buttons = soup.find_all(["button", "a"], string=re.compile(r'notify|add to cart', re.I))
-        notify_btn   = any(re.search(r'notify', b.get_text(), re.I) for b in buttons)
-        addcart_btn  = any(re.search(r'add to cart', b.get_text(), re.I) for b in buttons)
+        buttons = soup.find_all(
+            ["button", "a"], string=re.compile(r"notify|add to cart", re.I)
+        )
+        notify_btn = any(re.search(r"notify", b.get_text(), re.I) for b in buttons)
+        addcart_btn = any(
+            re.search(r"add to cart", b.get_text(), re.I) for b in buttons
+        )
         in_stock = addcart_btn and not notify_btn
 
     # Extract product ID from URL
-    pid_match = re.search(r'/(\d{7,})/', url)
+    pid_match = re.search(r"/(\d{7,})/", url)
     pid = pid_match.group(1) if pid_match else url
 
-    print(f"  → {'✅ IN STOCK' if in_stock else '❌ Out of Stock'} | {name[:60]} | ₹{price}")
+    print(
+        f"  → {'✅ IN STOCK' if in_stock else '❌ Out of Stock'} | {name[:60]} | ₹{price}"
+    )
 
     return {
         "id": pid,
@@ -253,11 +327,20 @@ def _find_products_in_json(data, depth=0) -> list:
     if isinstance(data, list) and len(data) > 0:
         # Check if this looks like a product list
         first = data[0]
-        if isinstance(first, dict) and any(k in first for k in ("productId", "prdId", "name", "productName", "title")):
+        if isinstance(first, dict) and any(
+            k in first for k in ("productId", "prdId", "name", "productName", "title")
+        ):
             return [_normalize_json_product(p) for p in data if isinstance(p, dict)]
     if isinstance(data, dict):
         for key, val in data.items():
-            if key in ("products", "productList", "items", "data", "results", "listing"):
+            if key in (
+                "products",
+                "productList",
+                "items",
+                "data",
+                "results",
+                "listing",
+            ):
                 result = _find_products_in_json(val, depth + 1)
                 if result:
                     return result
@@ -273,14 +356,31 @@ def _normalize_json_product(p: dict) -> dict:
     name = p.get("productName") or p.get("name") or p.get("title") or ""
     price = str(p.get("sellingPrice") or p.get("price") or p.get("mrp") or "")
     slug = p.get("productUrl") or p.get("url") or p.get("slug") or ""
-    url = ("https://www.firstcry.com" + slug) if slug and not slug.startswith("http") else slug
+    url = (
+        ("https://www.firstcry.com" + slug)
+        if slug and not slug.startswith("http")
+        else slug
+    )
     in_stock = p.get("inStock", True)
     if "stockStatus" in p:
-        in_stock = str(p["stockStatus"]).lower() not in ("oos", "out_of_stock", "0", "false")
-    return {"id": pid, "name": name, "price": price, "url": url, "in_stock": in_stock, "brand": ""}
+        in_stock = str(p["stockStatus"]).lower() not in (
+            "oos",
+            "out_of_stock",
+            "0",
+            "false",
+        )
+    return {
+        "id": pid,
+        "name": name,
+        "price": price,
+        "url": url,
+        "in_stock": in_stock,
+        "brand": "",
+    }
 
 
 # ─── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+
 
 def send_telegram(message: str):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -323,8 +423,14 @@ def notify(new_products: list[dict], back_in_stock: list[dict]):
     if not new_products and not back_in_stock:
         return
 
-    lines_tg = ["🚗 <b>FirstCry Stock Alert!</b>", f"🕐 {datetime.now().strftime('%d %b %Y, %I:%M %p')}\n"]
-    lines_email = ["<h2>🚗 FirstCry Stock Alert</h2>", f"<p><i>{datetime.now().strftime('%d %b %Y, %I:%M %p')}</i></p>"]
+    lines_tg = [
+        "🚗 <b>FirstCry Stock Alert!</b>",
+        f"🕐 {datetime.now().strftime('%d %b %Y, %I:%M %p')}\n",
+    ]
+    lines_email = [
+        "<h2>🚗 FirstCry Stock Alert</h2>",
+        f"<p><i>{datetime.now().strftime('%d %b %Y, %I:%M %p')}</i></p>",
+    ]
 
     if new_products:
         lines_tg.append("✨ <b>NEW listings found:</b>")
@@ -332,8 +438,12 @@ def notify(new_products: list[dict], back_in_stock: list[dict]):
         for p in new_products:
             price_str = f" — ₹{p['price']}" if p.get("price") else ""
             avail = "✅ In Stock" if p.get("in_stock") else "❌ Out of Stock"
-            lines_tg.append(f"• <a href=\"{p['url']}\">{p['name']}</a>{price_str} [{avail}]")
-            lines_email.append(f"<li><a href=\"{p['url']}\">{p['name']}</a>{price_str} — {avail}</li>")
+            lines_tg.append(
+                f"• <a href=\"{p['url']}\">{p['name']}</a>{price_str} [{avail}]"
+            )
+            lines_email.append(
+                f"<li><a href=\"{p['url']}\">{p['name']}</a>{price_str} — {avail}</li>"
+            )
         lines_email.append("</ul>")
 
     if back_in_stock:
@@ -342,7 +452,9 @@ def notify(new_products: list[dict], back_in_stock: list[dict]):
         for p in back_in_stock:
             price_str = f" — ₹{p['price']}" if p.get("price") else ""
             lines_tg.append(f"• <a href=\"{p['url']}\">{p['name']}</a>{price_str}")
-            lines_email.append(f"<li><a href=\"{p['url']}\">{p['name']}</a>{price_str}</li>")
+            lines_email.append(
+                f"<li><a href=\"{p['url']}\">{p['name']}</a>{price_str}</li>"
+            )
         lines_email.append("</ul>")
 
     tg_message = "\n".join(lines_tg)
@@ -356,6 +468,7 @@ def notify(new_products: list[dict], back_in_stock: list[dict]):
 
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
+
 
 def main():
     print(f"\n{'='*60}")
@@ -406,7 +519,9 @@ def main():
         seen[brand] = brand_seen
         all_new.extend(new_products)
         all_back.extend(back_in_stock)
-        print(f"  Total: {len(products)} | New: {len(new_products)} | Back in stock: {len(back_in_stock)}")
+        print(
+            f"  Total: {len(products)} | New: {len(new_products)} | Back in stock: {len(back_in_stock)}"
+        )
         time.sleep(2)
 
     # ── Part 2: Individual watched products (detect back-in-stock) ────────────
@@ -457,7 +572,9 @@ def main():
     if not all_new and not all_back:
         print("\n✅ No changes detected. All quiet.")
     else:
-        print(f"\n🚨 Alerts sent: {len(all_new)} new listings, {len(all_back)} back-in-stock")
+        print(
+            f"\n🚨 Alerts sent: {len(all_new)} new listings, {len(all_back)} back-in-stock"
+        )
 
 
 if __name__ == "__main__":
