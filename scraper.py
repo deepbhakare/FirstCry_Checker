@@ -1,6 +1,7 @@
 """
 FirstCry Stock Checker — Hot Wheels & Majorette
 Checks for new/in-stock items and sends Telegram + Email notifications.
+Supports both listing pages AND individual product pages.
 """
 
 import os
@@ -18,9 +19,21 @@ from datetime import datetime
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
 PINCODE = "411014"
 
-URLS = {
+# ── Listing pages (monitors entire brand pages for NEW arrivals) ──────────────
+LISTING_URLS = {
     "Hot Wheels": "https://www.firstcry.com/hotwheels/5/0/113?sort=popularity&q=ard-hot%20wheels&ref2=q_ard_hot%20wheels&asid=53241",
     "Majorette":  "https://www.firstcry.com/Majorette/0/0/1335?q=as_Majorette&asid=48297",
+}
+
+# ── Individual product pages (monitors specific out-of-stock cars) ────────────
+# Add any specific product URL here — bot will alert you when it comes IN STOCK.
+# Format:  "Your Label": "https://www.firstcry.com/...product-detail"
+WATCH_PRODUCTS = {
+    "HW Ferrari F40 Competizione Red": "https://www.firstcry.com/hot-wheels/hot-wheels-ferrari-f40-competizione-198-250-toy-car-red/21965916/product-detail",
+
+    # ↓↓ ADD MORE CARS BELOW THIS LINE ↓↓
+    # "HW Bone Shaker": "https://www.firstcry.com/...product-detail",
+    # "Majorette Porsche 911": "https://www.firstcry.com/...product-detail",
 }
 
 # Telegram
@@ -175,6 +188,64 @@ def parse_products(html: str, brand: str) -> list[dict]:
     return products
 
 
+def parse_single_product(html: str, label: str, url: str) -> dict | None:
+    """
+    Parse a single FirstCry product detail page.
+    Detects whether the product is in stock or showing 'Notify Me'.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Extract product name from title or h1
+    name = label  # fallback to the label we gave it
+    h1 = soup.find("h1")
+    if h1:
+        name = h1.get_text(strip=True)
+    elif soup.title:
+        name = soup.title.string.strip()
+
+    # Extract price
+    price = ""
+    price_el = soup.find(class_=re.compile(r'selling.?price|final.?price|prd.?price', re.I))
+    if not price_el:
+        price_el = soup.find(string=re.compile(r'₹\s*\d+'))
+    if price_el:
+        price_text = price_el.get_text(strip=True) if hasattr(price_el, 'get_text') else str(price_el)
+        price_match = re.search(r'[\d,]+', price_text.replace('₹', ''))
+        price = price_match.group().replace(',', '') if price_match else ""
+
+    # Detect stock status — look for "Notify Me" button or "Add to Cart"
+    page_text = soup.get_text()
+    notify_me  = bool(re.search(r'notify\s*me', page_text, re.I))
+    add_to_cart = bool(re.search(r'add\s*to\s*(cart|bag)', page_text, re.I))
+
+    # "Add to Cart" present and "Notify Me" absent = in stock
+    if add_to_cart and not notify_me:
+        in_stock = True
+    elif notify_me:
+        in_stock = False
+    else:
+        # Ambiguous — check button elements specifically
+        buttons = soup.find_all(["button", "a"], string=re.compile(r'notify|add to cart', re.I))
+        notify_btn   = any(re.search(r'notify', b.get_text(), re.I) for b in buttons)
+        addcart_btn  = any(re.search(r'add to cart', b.get_text(), re.I) for b in buttons)
+        in_stock = addcart_btn and not notify_btn
+
+    # Extract product ID from URL
+    pid_match = re.search(r'/(\d{7,})/', url)
+    pid = pid_match.group(1) if pid_match else url
+
+    print(f"  → {'✅ IN STOCK' if in_stock else '❌ Out of Stock'} | {name[:60]} | ₹{price}")
+
+    return {
+        "id": pid,
+        "name": name,
+        "price": price,
+        "url": url,
+        "in_stock": in_stock,
+        "brand": "Watched",
+    }
+
+
 def _find_products_in_json(data, depth=0) -> list:
     """Recursively hunt for a product list inside a nested JSON blob."""
     if depth > 8:
@@ -295,19 +366,19 @@ def main():
     all_new = []
     all_back = []
 
-    for brand, url in URLS.items():
-        print(f"\n[{brand}] Fetching {url}")
+    # ── Part 1: Listing pages (detect new arrivals) ───────────────────────────
+    for brand, url in LISTING_URLS.items():
+        print(f"\n[LISTING] {brand}")
         html = fetch_page(url)
         if not html:
-            print(f"[{brand}] ⚠️  Could not fetch page, skipping.")
+            print(f"  ⚠️  Could not fetch page, skipping.")
             continue
 
         products = parse_products(html, brand)
         if not products:
-            print(f"[{brand}] ⚠️  No products parsed. Site may have changed structure.")
-            # Try to print a snippet for debugging
+            print(f"  ⚠️  No products parsed. Site may have changed structure.")
             soup = BeautifulSoup(html, "html.parser")
-            print(f"[{brand}] Page title: {soup.title.string if soup.title else 'N/A'}")
+            print(f"  Page title: {soup.title.string if soup.title else 'N/A'}")
             continue
 
         brand_seen = seen.get(brand, {})
@@ -319,7 +390,6 @@ def main():
             prev = brand_seen.get(pid)
 
             if prev is None:
-                # Brand new product we've never seen before
                 new_products.append(p)
                 brand_seen[pid] = {
                     "name": p["name"],
@@ -328,18 +398,58 @@ def main():
                     "first_seen": datetime.now().isoformat(),
                 }
             elif not prev.get("in_stock") and p.get("in_stock"):
-                # Was out of stock, now back in stock
                 back_in_stock.append(p)
                 brand_seen[pid]["in_stock"] = True
             else:
-                # Update stock status silently
                 brand_seen[pid]["in_stock"] = p.get("in_stock", True)
 
         seen[brand] = brand_seen
         all_new.extend(new_products)
         all_back.extend(back_in_stock)
+        print(f"  Total: {len(products)} | New: {len(new_products)} | Back in stock: {len(back_in_stock)}")
+        time.sleep(2)
 
-        print(f"[{brand}] Total: {len(products)} products | New: {len(new_products)} | Back in stock: {len(back_in_stock)}")
+    # ── Part 2: Individual watched products (detect back-in-stock) ────────────
+    if WATCH_PRODUCTS:
+        print(f"\n[WATCHLIST] Checking {len(WATCH_PRODUCTS)} specific product(s)...")
+        watch_seen = seen.get("__watchlist__", {})
+
+        for label, url in WATCH_PRODUCTS.items():
+            print(f"\n  Checking: {label}")
+            html = fetch_page(url)
+            if not html:
+                print(f"  ⚠️  Could not fetch, skipping.")
+                continue
+
+            p = parse_single_product(html, label, url)
+            if not p:
+                continue
+
+            pid = product_id(p)
+            prev = watch_seen.get(pid)
+
+            if prev is None:
+                # First time seeing this — record its current status
+                watch_seen[pid] = {
+                    "name": p["name"],
+                    "in_stock": p["in_stock"],
+                    "url": url,
+                    "first_seen": datetime.now().isoformat(),
+                }
+                # Only alert if it's ALREADY in stock on first check
+                if p["in_stock"]:
+                    all_back.append(p)
+            elif not prev.get("in_stock") and p["in_stock"]:
+                # Was out of stock — NOW in stock! 🎉
+                all_back.append(p)
+                watch_seen[pid]["in_stock"] = True
+                print(f"  🎉 BACK IN STOCK: {label}")
+            else:
+                watch_seen[pid]["in_stock"] = p["in_stock"]
+
+            time.sleep(2)
+
+        seen["__watchlist__"] = watch_seen
 
     save_seen(seen)
     notify(all_new, all_back)
@@ -347,7 +457,7 @@ def main():
     if not all_new and not all_back:
         print("\n✅ No changes detected. All quiet.")
     else:
-        print(f"\n🚨 Alerts sent: {len(all_new)} new, {len(all_back)} back-in-stock")
+        print(f"\n🚨 Alerts sent: {len(all_new)} new listings, {len(all_back)} back-in-stock")
 
 
 if __name__ == "__main__":
