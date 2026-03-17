@@ -8,6 +8,7 @@ on:
 jobs:
   check-stock:
     runs-on: ubuntu-latest
+    timeout-minutes: 10        # FIX 4: kills the job if it hangs past 10 min
     permissions:
       contents: write
 
