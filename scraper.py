@@ -201,7 +201,7 @@ def parse_single_product(html: str, label: str, url: str) -> dict | None:
     h1 = soup.find("h1")
     if h1:
         name = h1.get_text(strip=True)
-    elif soup.title:
+    elif soup.title and soup.title.string:
         name = soup.title.string.strip()
 
     price = ""
