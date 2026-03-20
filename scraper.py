@@ -1,433 +1,451 @@
 """
-FirstCry Stock Checker — Hot Wheels & Majorette
-Checks for new/in-stock items and sends Telegram + Email notifications.
-Supports both listing pages AND individual product pages.
+scraper.py — Core scraping engine for FirstCry Tracker
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Uses Playwright (real Chromium browser) to:
+  • Scrape Hot Wheels + Majorette brand listing pages
+  • Scrape individual watched product pages
 
-OPTIMISATIONS APPLIED:
-  FIX 1 — sleep(1) instead of sleep(2) between requests
-  FIX 2 — Homepage fetched ONCE, single session reused for all requests
-  FIX 3 — timeout=10 on all requests (was 20) — prevents hung runs
-  FIX 4 — GitHub Actions job timeout set in main.yml (timeout-minutes: 10)
+Stock detection logic:
+  ┌─────────────────────────────────────────────────────────┐
+  │  LISTING PAGES                                          │
+  │  ─────────────────────────────────────────────────────  │
+  │  First run      → store baseline silently (no alert)   │
+  │  New product    → 🆕 NEW alert                         │
+  │  OOS → in stock → 🔔 BACK IN STOCK alert               │
+  │  In stock → OOS → update state silently                │
+  │                                                         │
+  │  WATCHED PRODUCTS                                       │
+  │  ─────────────────────────────────────────────────────  │
+  │  First seen + in stock  → 🔔 BACK IN STOCK alert       │
+  │  First seen + OOS       → store baseline silently      │
+  │  OOS → in stock         → 🔔 BACK IN STOCK alert       │
+  │  In stock → OOS         → update state silently        │
+  └─────────────────────────────────────────────────────────┘
 """
 
-import os
-import json
 import hashlib
-import smtplib
-import requests
-import time
+import logging
 import re
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from bs4 import BeautifulSoup
-from datetime import datetime
+import time
 
-# ─── CONFIG ────────────────────────────────────────────────────────────────────
-PINCODE = "411014"
+from playwright.sync_api import (
+    Browser,
+    BrowserContext,
+    Page,
+    Playwright,
+    sync_playwright,
+    TimeoutError as PWTimeout,
+)
 
-# ── Listing pages (monitors entire brand pages for NEW arrivals) ──────────────
-LISTING_URLS = {
-    "Hot Wheels": "https://www.firstcry.com/hotwheels/5/0/113?sort=popularity&q=ard-hot%20wheels&ref2=q_ard_hot%20wheels&asid=53241",
-    "Majorette":  "https://www.firstcry.com/Majorette/0/0/1335?q=as_Majorette&asid=48297",
-}
+from config import AppConfig, LISTING_URLS, WATCH_PRODUCTS
+from db import Database
+from notifier import Notifier
 
-# ── Individual product pages (monitors specific out-of-stock cars) ────────────
-# Bot alerts you the moment any of these show "Add to Cart" instead of "Notify Me"
-# Format: "Your Label": "https://www.firstcry.com/...product-detail"
-WATCH_PRODUCTS = {
-    # ── Hot Wheels ──────────────────────────────────────────────────────────────
-    "HW Ferrari F40 Competizione Red":       "https://www.firstcry.com/hot-wheels/hot-wheels-ferrari-f40-competizione-198-250-toy-car-red/21965916/product-detail",
-    "HW McLaren Formula 1 Team 4":           "https://www.firstcry.com/hot-wheels/hot-wheels-mclaren-formula-1-team-4-formula-one-premium-die-cast-car-anthracite-black-and-yellow/22115543/product-detail",
-    "HW Mercedes-Benz 300 SEL 6.8 AMG":     "https://www.firstcry.com/hot-wheels/hot-wheels-mercedes-benz-300-sel-6-8-amg-die-cast-toy-car-black/22140896/product-detail",
-    "HW Honda Civic Custom STSTH":           "https://www.firstcry.com/hot-wheels/hot-wheels-73-honda-civic-custom-personnalise-car-231-250-maroon/22140905/product-detail",
-    "HW Nissan 35GT RR Ver 2":               "https://www.firstcry.com/hot-wheels/hot-wheels-die-cast-lb-silhouette-works-gt-nissan-35gt-rr-ver-2-car-toy-silver/22140906/product-detail",
-    "HW Mercedes-AMG Petronas F1 Team":      "https://www.firstcry.com/hot-wheels/hot-wheels-premium-2025-mercedes-amg-petronas-f1-team-car-black-and-green/22157119/product-detail",
-    "HW Visa Cash App Racing Bulls F1":      "https://www.firstcry.com/hot-wheels/hot-wheels-premium-2025-visa-cash-app-racing-bulls-f1-team-car-black-and-white/22157138/product-detail",
-    "HW Ferrari Team Transport":             "https://www.firstcry.com/hot-wheels/hot-wheels-second-story-lorry-die-cast-free-wheel-car-transport-truck-red/22159210/product-detail",
-    "HW Ford Mustang Dark Horse":            "https://www.firstcry.com/hot-wheels/hot-wheels-ford-mustang-dark-horse-250-250-die-cast-toy-car-blue/22178581/product-detail",
-    "HW Toyota Supra 232-250":               "https://www.firstcry.com/hot-wheels/hot-wheels-toyota-supra-232-250-die-cast-toy-car-green/22178925/product-detail",
-    "HW McLaren P1":                         "https://www.firstcry.com/hot-wheels/hot-wheels-mclaren-p1-165-250-die-cast-toy-car-maroon/22179292/product-detail",
-    "HW McLaren F1":                         "https://www.firstcry.com/hot-wheels/hot-wheels-mclaren-f1-243-250-die-cast-toy-car-red/22189703/product-detail",
-    "HW STH Ford Sierra Cosworth":           "https://www.firstcry.com/hot-wheels/hot-wheels-87-ford-sierra-cosworth-116-250-toy-car-dark-pink/22240154/product-detail",
-    "HW Ferrari F40 Competizione Black":     "https://www.firstcry.com/hot-wheels/hot-wheels-ferrari-f40-competizione-63-250-toy-car-black/22240147/product-detail",
-    "HW Visa Cash App RB F1 68-250":         "https://www.firstcry.com/hot-wheels/hot-wheels-visa-cash-app-racing-bulls-formula-1-team-equipe-68-250-toy-car-white-and-black/22240176/product-detail",
-    "HW Lamborghini Huracan Coupe":          "https://www.firstcry.com/hot-wheels/hot-wheels-lb-works-lamborghini-huracan-coupe-91-250-toy-car-black/22240182/product-detail",
+logger = logging.getLogger(__name__)
 
-    # ── Majorette ───────────────────────────────────────────────────────────────
-    "Majorette Porsche 911 GT3 Cup":         "https://www.firstcry.com/majorette/majorette-1-64-scale-porsche-911-gt3-cup-edition-free-wheel-die-cast-car-green/19931378/product-detail",
-    "Majorette Porsche 911 Carrera RS Black":"https://www.firstcry.com/majorette/majorette-porsche-racing-die-cast-free-wheel-model-toy-car-black/19991405/product-detail",
-    "CHASE Majorette Ford F-150 Raptor":     "https://www.firstcry.com/majorette/majorette-ford-f-150-raptor-showroom-premium-die-cast-car-blue/22063291/product-detail",
-    "Majorette BMW M3 Green":                "https://www.firstcry.com/majorette/majorette-bmw-m3-showroom-premium-die-cast-car-green/22063292/product-detail",
-    "Majorette Aston Martin Vantage GTB":    "https://www.firstcry.com/majorette/majorette-aston-martin-vantage-gtb-showroom-premium-die-cast-car-white/22063293/product-detail",
-    "Majorette Land Rover Defender 90":      "https://www.firstcry.com/majorette/majorette-land-rover-defender-90-showroom-premium-die-cast-car-silver/22063301/product-detail",
-    "Majorette Lamborghini Huracan Avio":    "https://www.firstcry.com/majorette/majorette-lamborghini-huracan-avio-showroom-premium-die-cast-car-black/22063303/product-detail",
-    "Majorette Toyota Supra JZA80 JDM":      "https://www.firstcry.com/majorette/majorette-toyota-supra-jzabo-jdm-legends-deluxe-die-cast-toy-car-royal-blue-and-lime-green/22063306/product-detail",
-    "CHASE Majorette Nissan Cefiro A31":     "https://www.firstcry.com/majorette/majorette-nissan-cefiro-a31-jdm-legends-deluxe-die-cast-car-dark-pink/22063307/product-detail",
-    "Majorette Porsche 911 Carrera RS Blue": "https://www.firstcry.com/majorette/majorette-porsche-911-carrera-rs-2-7-castheads-premium-die-cast-free-wheel-moving-cars-light-blue/22064343/product-detail",
-    "Majorette Toyota Century JDM":          "https://www.firstcry.com/majorette/majorette-toyota-century-jdm-legends-premium-die-cast-car-grey/22064404/product-detail",
-    "Majorette BMW M3 Vintage Black":        "https://www.firstcry.com/majorette/majorette-bmw-m3-vintage-premium-die-cast-car-black/22064424/product-detail",
-    "Majorette Mercedes 450 SEL Vintage":    "https://www.firstcry.com/majorette/majorette-mercedes-benz-450-sel-vintage-premium-die-cast-car-light-green/22064428/product-detail",
-    "Majorette Aston Martin CHROME Vantage": "https://www.firstcry.com/majorette/majorette-aston-martin-vantage-gtb-showroom-deluxe-die-cast-car-green/22069192/product-detail",
 
-    # ── ADD MORE CARS BELOW THIS LINE ───────────────────────────────────────────
-    # "HW Car Name": "https://www.firstcry.com/...product-detail",
-    # "Majorette Car Name": "https://www.firstcry.com/...product-detail",
-}
+# ─── HELPERS ──────────────────────────────────────────────────────────────────
 
-# ─── CREDENTIALS (from GitHub Secrets) ────────────────────────────────────────
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
-EMAIL_SENDER       = os.environ.get("EMAIL_SENDER", "")
-EMAIL_PASSWORD     = os.environ.get("EMAIL_PASSWORD", "")
-EMAIL_RECEIVER     = os.environ.get("EMAIL_RECEIVER", "")
+def _make_key(value: str) -> str:
+    """Produce a stable MD5 string key for any product identifier."""
+    return hashlib.md5(value.strip().encode()).hexdigest()
 
-STATE_FILE = "seen_products.json"
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/123.0.0.0 Safari/537.36"
-    ),
-    "Accept-Language": "en-IN,en;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Referer": "https://www.firstcry.com/",
-}
+def _extract_pid(url: str) -> str:
+    """Extract the numeric FirstCry product ID from a product URL."""
+    match = re.search(r'/(\d{7,})/', url)
+    return match.group(1) if match else url
 
-# ─── STATE MANAGEMENT ─────────────────────────────────────────────────────────
 
-def load_seen() -> dict:
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE) as f:
-            return json.load(f)
-    return {}
+def _clean_price(raw: str) -> str:
+    """Strip currency symbols and commas from a price string."""
+    match = re.search(r'[\d,]+', raw.replace("₹", "").replace(",", ""))
+    return match.group().replace(",", "") if match else ""
 
-def save_seen(data: dict):
-    with open(STATE_FILE, "w") as f:
-        json.dump(data, f, indent=2)
 
-# ─── SESSION — FIX 2: homepage fetched ONCE, reused for all requests ──────────
+# ─── BROWSER FACTORY ──────────────────────────────────────────────────────────
 
-def create_session() -> requests.Session:
-    session = requests.Session()
-    try:
-        session.get("https://www.firstcry.com/", headers=HEADERS, timeout=10)
-        session.cookies.set("fc_pincode", PINCODE, domain=".firstcry.com")
-        print("[SESSION] Initialised ✅")
-    except Exception as e:
-        print(f"[SESSION] Warning: {e}")
-    return session
-
-# ─── FETCH ────────────────────────────────────────────────────────────────────
-
-def fetch_page(url: str, session: requests.Session) -> str | None:
-    try:
-        resp = session.get(url, headers=HEADERS, timeout=10)  # FIX 3
-        resp.raise_for_status()
-        return resp.text
-    except Exception as e:
-        print(f"[ERROR] {url}: {e}")
-        return None
-
-# ─── LISTING PAGE PARSER ──────────────────────────────────────────────────────
-
-def parse_products(html: str, brand: str) -> list[dict]:
-    products = []
-    soup = BeautifulSoup(html, "html.parser")
-
-    # Strategy 1: Embedded JSON
-    for script in soup.find_all("script"):
-        text = script.string or ""
-        if "__NEXT_DATA__" in text or "window.__INITIAL_STATE__" in text:
-            try:
-                match = re.search(r'__NEXT_DATA__\s*=\s*(\{.*?\});?\s*</script>', text, re.DOTALL)
-                if not match:
-                    match = re.search(r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*;', text, re.DOTALL)
-                if match:
-                    data = json.loads(match.group(1))
-                    items = _find_products_in_json(data)
-                    if items:
-                        print(f"  Found {len(items)} products via embedded JSON")
-                        return items
-            except Exception as e:
-                print(f"  [WARN] JSON: {e}")
-
-    # Strategy 2: HTML cards
-    cards = soup.find_all(attrs={"data-prd-id": True})
-    if cards:
-        for card in cards:
-            pid      = card.get("data-prd-id", "")
-            name_el  = card.find(class_=re.compile(r'product.?name|prd.?name|title', re.I))
-            name     = name_el.get_text(strip=True) if name_el else card.get("data-prd-name", "")
-            price_el = card.find(class_=re.compile(r'price|selling.?price', re.I))
-            price    = price_el.get_text(strip=True) if price_el else ""
-            link_el  = card.find("a", href=True)
-            url      = ("https://www.firstcry.com" + link_el["href"]) if link_el and link_el["href"].startswith("/") else (link_el["href"] if link_el else "")
-            in_stock = not bool(card.find(string=re.compile(r"out of stock|notify me", re.I)))
-            if name or pid:
-                products.append({"id": pid, "name": name, "price": price, "url": url, "in_stock": in_stock, "brand": brand})
-        if products:
-            print(f"  Found {len(products)} products via HTML cards")
-            return products
-
-    # Strategy 3: Link scan
-    seen_hrefs = set()
-    for link in soup.find_all("a", href=re.compile(r"/[a-z0-9\-]+/\d{7,}")):
-        href = link.get("href", "")
-        if href in seen_hrefs:
-            continue
-        seen_hrefs.add(href)
-        name = link.get_text(strip=True)
-        if len(name) < 5:
-            name_el = link.find(class_=re.compile(r'name|title', re.I))
-            name = name_el.get_text(strip=True) if name_el else ""
-        if not name:
-            continue
-        full_url = "https://www.firstcry.com" + href if href.startswith("/") else href
-        parent = link.find_parent()
-        out_of_stock = bool(parent.find(string=re.compile(r"out of stock", re.I))) if parent else False
-        pid_match = re.search(r'/(\d{7,})', href)
-        products.append({"id": pid_match.group(1) if pid_match else href, "name": name, "price": "", "url": full_url, "in_stock": not out_of_stock, "brand": brand})
-
-    print(f"  Found {len(products)} products via link scan")
-    return products
-
-# ─── SINGLE PRODUCT PAGE PARSER ───────────────────────────────────────────────
-
-def parse_single_product(html: str, label: str, url: str) -> dict | None:
-    soup = BeautifulSoup(html, "html.parser")
-
-    name = label
-    h1 = soup.find("h1")
-    if h1:
-        name = h1.get_text(strip=True)
-    elif soup.title and soup.title.string:
-        name = soup.title.string.strip()
-
-    price = ""
-    price_el = soup.find(class_=re.compile(r'selling.?price|final.?price|prd.?price', re.I))
-    if not price_el:
-        price_el = soup.find(string=re.compile(r'₹\s*\d+'))
-    if price_el:
-        price_text = price_el.get_text(strip=True) if hasattr(price_el, 'get_text') else str(price_el)
-        m = re.search(r'[\d,]+', price_text.replace('₹', ''))
-        price = m.group().replace(',', '') if m else ""
-
-    page_text   = soup.get_text()
-    notify_me   = bool(re.search(r'notify\s*me', page_text, re.I))
-    add_to_cart = bool(re.search(r'add\s*to\s*(cart|bag)', page_text, re.I))
-
-    if add_to_cart and not notify_me:
-        in_stock = True
-    elif notify_me:
-        in_stock = False
-    else:
-        buttons    = soup.find_all(["button", "a"], string=re.compile(r'notify|add to cart', re.I))
-        notify_btn = any(re.search(r'notify', b.get_text(), re.I) for b in buttons)
-        cart_btn   = any(re.search(r'add to cart', b.get_text(), re.I) for b in buttons)
-        in_stock   = cart_btn and not notify_btn
-
-    pid_match = re.search(r'/(\d{7,})/', url)
-    pid = pid_match.group(1) if pid_match else url
-
-    print(f"  {'✅ IN STOCK' if in_stock else '❌ Out of Stock'} | {name[:55]} | ₹{price}")
-    return {"id": pid, "name": name, "price": price, "url": url, "in_stock": in_stock, "brand": "Watched"}
-
-# ─── JSON HELPERS ─────────────────────────────────────────────────────────────
-
-def _find_products_in_json(data, depth=0) -> list:
-    if depth > 8:
-        return []
-    if isinstance(data, list) and len(data) > 0:
-        first = data[0]
-        if isinstance(first, dict) and any(k in first for k in ("productId", "prdId", "name", "productName", "title")):
-            return [_normalize_json_product(p) for p in data if isinstance(p, dict)]
-    if isinstance(data, dict):
-        for key, val in data.items():
-            if key in ("products", "productList", "items", "data", "results", "listing"):
-                result = _find_products_in_json(val, depth + 1)
-                if result:
-                    return result
-            else:
-                result = _find_products_in_json(val, depth + 1)
-                if result:
-                    return result
-    return []
-
-def _normalize_json_product(p: dict) -> dict:
-    pid   = str(p.get("productId") or p.get("prdId") or p.get("id") or "")
-    name  = p.get("productName") or p.get("name") or p.get("title") or ""
-    price = str(p.get("sellingPrice") or p.get("price") or p.get("mrp") or "")
-    slug  = p.get("productUrl") or p.get("url") or p.get("slug") or ""
-    url   = ("https://www.firstcry.com" + slug) if slug and not slug.startswith("http") else slug
-    in_stock = p.get("inStock", True)
-    if "stockStatus" in p:
-        in_stock = str(p["stockStatus"]).lower() not in ("oos", "out_of_stock", "0", "false")
-    return {"id": pid, "name": name, "price": price, "url": url, "in_stock": in_stock, "brand": ""}
-
-def product_id(product: dict) -> str:
-    raw = (product.get("id") or product.get("url") or product.get("name", "")).strip()
-    return hashlib.md5(raw.encode()).hexdigest()
-
-# ─── NOTIFICATIONS ─────────────────────────────────────────────────────────────
-
-def send_telegram(message: str):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[SKIP] Telegram not configured.")
-        return
-    try:
-        r = requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML", "disable_web_page_preview": False},
-            timeout=10,
-        )
-        r.raise_for_status()
-        print("[OK] Telegram sent ✅")
-    except Exception as e:
-        print(f"[ERROR] Telegram: {e}")
-
-def send_email(subject: str, body_html: str):
-    if not EMAIL_SENDER or not EMAIL_PASSWORD or not EMAIL_RECEIVER:
-        print("[SKIP] Email not configured.")
-        return
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = EMAIL_SENDER
-        msg["To"]      = EMAIL_RECEIVER
-        msg.attach(MIMEText(body_html, "html"))
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
-        print("[OK] Email sent ✅")
-    except Exception as e:
-        print(f"[ERROR] Email: {e}")
-
-def notify(new_products: list[dict], back_in_stock: list[dict]):
-    if not new_products and not back_in_stock:
-        return
-
-    ts = datetime.now().strftime('%d %b %Y, %I:%M %p')
-    lines_tg    = [f"🚗 <b>FirstCry Stock Alert!</b>", f"🕐 {ts}\n"]
-    lines_email = [f"<h2>🚗 FirstCry Stock Alert</h2><p><i>{ts}</i></p>"]
-
-    if new_products:
-        lines_tg.append("✨ <b>NEW listings found:</b>")
-        lines_email.append("<h3>✨ New Listings</h3><ul>")
-        for p in new_products:
-            price_str = f" — ₹{p['price']}" if p.get("price") else ""
-            avail     = "✅ In Stock" if p.get("in_stock") else "❌ Out of Stock"
-            lines_tg.append(f"• <a href=\"{p['url']}\">{p['name']}</a>{price_str} [{avail}]")
-            lines_email.append(f"<li><a href=\"{p['url']}\">{p['name']}</a>{price_str} — {avail}</li>")
-        lines_email.append("</ul>")
-
-    if back_in_stock:
-        lines_tg.append("\n🔔 <b>Back in stock:</b>")
-        lines_email.append("<h3>🔔 Back In Stock</h3><ul>")
-        for p in back_in_stock:
-            price_str = f" — ₹{p['price']}" if p.get("price") else ""
-            lines_tg.append(f"• <a href=\"{p['url']}\">{p['name']}</a>{price_str}")
-            lines_email.append(f"<li><a href=\"{p['url']}\">{p['name']}</a>{price_str}</li>")
-        lines_email.append("</ul>")
-
-    send_telegram("\n".join(lines_tg))
-    send_email(
-        subject=f"🚗 FirstCry Alert: {len(new_products)} new + {len(back_in_stock)} back-in-stock",
-        body_html="\n".join(lines_email),
+def _launch_browser(pw: Playwright, config: AppConfig) -> tuple[Browser, Page]:
+    """
+    Launch a headless Chromium instance configured to avoid bot detection.
+    Blocks image/font requests to reduce page load time.
+    Sets Pune pincode cookie for correct stock availability.
+    """
+    browser = pw.chromium.launch(
+        headless=True,
+        args=[
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-blink-features=AutomationControlled",
+        ],
     )
 
-# ─── MAIN ─────────────────────────────────────────────────────────────────────
+    context: BrowserContext = browser.new_context(
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/123.0.0.0 Safari/537.36"
+        ),
+        locale="en-IN",
+        viewport={"width": 1366, "height": 768},
+        extra_http_headers={"Accept-Language": "en-IN,en;q=0.9"},
+    )
 
-def main():
-    print(f"\n{'='*60}")
-    print(f"FirstCry Checker — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"{'='*60}\n")
+    # Pune pincode → correct stock and pricing
+    context.add_cookies([{
+        "name":   "fc_pincode",
+        "value":  config.pincode,
+        "domain": ".firstcry.com",
+        "path":   "/",
+    }])
 
-    seen     = load_seen()
-    all_new  = []
-    all_back = []
+    page: Page = context.new_page()
 
-    # FIX 2: One session for the entire run — homepage fetched ONCE
-    session = create_session()
+    # Block images, fonts and media — not needed, speeds up scraping
+    page.route(
+        "**/*.{png,jpg,jpeg,gif,webp,svg,ico,woff,woff2,ttf,otf,mp4,mp3}",
+        lambda route: route.abort(),
+    )
 
-    # ── Part 1: Listing pages ─────────────────────────────────────────────────
-    for brand, url in LISTING_URLS.items():
-        print(f"\n[LISTING] {brand}")
-        html = fetch_page(url, session)
-        if not html:
-            print("  ⚠️  Could not fetch, skipping.")
+    logger.info("Browser launched ✅")
+    return browser, page
+
+
+# ─── LISTING PAGE SCRAPER ─────────────────────────────────────────────────────
+
+def scrape_listing(page: Page, brand: str, url: str) -> list[dict]:
+    """
+    Scrape a FirstCry brand listing page for all product cards.
+
+    Waits for the page's JS to fully render product cards before
+    parsing, which avoids the empty-parse problem of plain requests.
+
+    Falls back to link-based extraction if card selectors are not found.
+    """
+    products: list[dict] = []
+
+    # ── Load page ─────────────────────────────────────────────────────────────
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_selector(
+            "[data-prd-id], .product-box, .prd-info-area, a[href*='/product-detail']",
+            timeout=15_000,
+        )
+    except PWTimeout:
+        logger.warning(f"[{brand}] Page timed out waiting for products.")
+        return products
+    except Exception as exc:
+        logger.error(f"[{brand}] Page load failed: {exc}")
+        return products
+
+    # ── Strategy 1: data-prd-id cards (preferred) ─────────────────────────────
+    cards = page.query_selector_all("[data-prd-id]")
+
+    if cards:
+        for card in cards:
+            try:
+                pid      = card.get_attribute("data-prd-id") or ""
+                name_el  = card.query_selector(".prd-info-area, [class*='product-name'], h3, h2")
+                name     = (
+                    name_el.inner_text().strip()
+                    if name_el
+                    else (card.get_attribute("data-prd-name") or "")
+                )
+                price_el = card.query_selector("[class*='selling-price'], [class*='prd-price'], [class*='price']")
+                price    = _clean_price(price_el.inner_text()) if price_el else ""
+                link_el  = card.query_selector("a[href]")
+                href     = link_el.get_attribute("href") if link_el else ""
+                full_url = (
+                    f"https://www.firstcry.com{href}"
+                    if href and href.startswith("/")
+                    else (href or url)
+                )
+                card_text = card.inner_text().lower()
+                in_stock  = (
+                    "notify me"     not in card_text and
+                    "out of stock"  not in card_text
+                )
+
+                if not name or not pid:
+                    continue
+
+                products.append({
+                    "product_key": _make_key(pid),
+                    "product_id":  pid,
+                    "name":        name,
+                    "url":         full_url,
+                    "price":       price,
+                    "brand":       brand,
+                    "category":    "listing",
+                    "in_stock":    in_stock,
+                })
+            except Exception as exc:
+                logger.debug(f"  Card parse error: {exc}")
+
+        logger.info(f"[{brand}] {len(products)} products via card strategy.")
+        return products
+
+    # ── Strategy 2: product-detail link scan (fallback) ───────────────────────
+    links = page.query_selector_all("a[href*='/product-detail']")
+    seen: set[str] = set()
+
+    for link in links:
+        href = link.get_attribute("href") or ""
+        if href in seen or not href:
+            continue
+        seen.add(href)
+
+        name = link.inner_text().strip()
+        if len(name) < 5:
             continue
 
-        products = parse_products(html, brand)
-        if not products:
-            print("  ⚠️  No products parsed — site may have changed structure.")
-            soup = BeautifulSoup(html, "html.parser")
-            print(f"  Page title: {soup.title.string if soup.title else 'N/A'}")
-            continue
+        full_url = f"https://www.firstcry.com{href}" if href.startswith("/") else href
+        pid      = _extract_pid(full_url)
 
-        brand_seen = seen.get(brand, {})
-        new_products, back_in_stock = [], []
+        products.append({
+            "product_key": _make_key(pid),
+            "product_id":  pid,
+            "name":        name,
+            "url":         full_url,
+            "price":       "",
+            "brand":       brand,
+            "category":    "listing",
+            "in_stock":    True,   # Can't determine from link alone
+        })
 
-        for p in products:
-            pid  = product_id(p)
-            prev = brand_seen.get(pid)
-            if prev is None:
-                new_products.append(p)
-                brand_seen[pid] = {"name": p["name"], "in_stock": p["in_stock"], "url": p["url"], "first_seen": datetime.now().isoformat()}
-            elif not prev.get("in_stock") and p.get("in_stock"):
-                back_in_stock.append(p)
-                brand_seen[pid]["in_stock"] = True
-            else:
-                brand_seen[pid]["in_stock"] = p.get("in_stock", True)
+    logger.info(f"[{brand}] {len(products)} products via link fallback.")
+    return products
 
-        seen[brand] = brand_seen
-        all_new.extend(new_products)
-        all_back.extend(back_in_stock)
-        print(f"  Total: {len(products)} | New: {len(new_products)} | Back in stock: {len(back_in_stock)}")
-        time.sleep(1)  # FIX 1
 
-    # ── Part 2: Watchlist ─────────────────────────────────────────────────────
-    if WATCH_PRODUCTS:
-        print(f"\n[WATCHLIST] Checking {len(WATCH_PRODUCTS)} cars...")
-        watch_seen = seen.get("__watchlist__", {})
+# ─── WATCHED PRODUCT SCRAPER ──────────────────────────────────────────────────
 
-        for label, url in WATCH_PRODUCTS.items():
-            print(f"\n  Checking: {label}")
-            html = fetch_page(url, session)
-            if not html:
-                print("  ⚠️  Could not fetch, skipping.")
-                continue
+def scrape_watch_product(page: Page, label: str, url: str) -> dict | None:
+    """
+    Scrape an individual product page and determine its stock status.
 
-            p = parse_single_product(html, label, url)
-            if not p:
-                continue
+    Stock detection priority:
+      1. Button elements — most reliable (actual DOM buttons)
+      2. Full page text — catches edge-case markup patterns
+      3. Conservative default → treat as OOS if indeterminate
+    """
+    # ── Load page ─────────────────────────────────────────────────────────────
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_selector(
+            "button, [class*='add-to-cart'], [class*='notify'], h1",
+            timeout=15_000,
+        )
+    except PWTimeout:
+        logger.warning(f"[WATCH] Timeout loading: {label}")
+        return None
+    except Exception as exc:
+        logger.error(f"[WATCH] Failed to load {label}: {exc}")
+        return None
 
-            pid  = product_id(p)
-            prev = watch_seen.get(pid)
+    # ── Product name ──────────────────────────────────────────────────────────
+    name  = label
+    h1_el = page.query_selector("h1")
+    if h1_el:
+        h1_text = h1_el.inner_text().strip()
+        if h1_text:
+            name = h1_text
 
-            if prev is None:
-                watch_seen[pid] = {"name": p["name"], "in_stock": p["in_stock"], "url": url, "first_seen": datetime.now().isoformat()}
-                if p["in_stock"]:
-                    all_back.append(p)
-            elif not prev.get("in_stock") and p["in_stock"]:
-                all_back.append(p)
-                watch_seen[pid]["in_stock"] = True
-                print(f"  🎉 BACK IN STOCK: {label}")
-            else:
-                watch_seen[pid]["in_stock"] = p["in_stock"]
+    # ── Price ─────────────────────────────────────────────────────────────────
+    price    = ""
+    price_el = page.query_selector(
+        "[class*='selling-price'], [class*='final-price'], [class*='prd-price']"
+    )
+    if price_el:
+        price = _clean_price(price_el.inner_text())
 
-            time.sleep(1)  # FIX 1
+    # ── Stock status ──────────────────────────────────────────────────────────
+    # Priority 1: Check actual button elements
+    buttons    = page.query_selector_all("button")
+    btn_texts  = [b.inner_text().strip().lower() for b in buttons if b.inner_text()]
 
-        seen["__watchlist__"] = watch_seen
+    has_cart_btn   = any("add to cart" in t or "add to bag" in t for t in btn_texts)
+    has_notify_btn = any("notify" in t for t in btn_texts)
 
-    save_seen(seen)
-    notify(all_new, all_back)
-
-    if not all_new and not all_back:
-        print("\n✅ No changes detected. All quiet.")
+    if has_cart_btn and not has_notify_btn:
+        in_stock = True
+    elif has_notify_btn and not has_cart_btn:
+        in_stock = False
     else:
-        print(f"\n🚨 Alerts sent — New: {len(all_new)} | Back in stock: {len(all_back)}")
+        # Priority 2: Full page text scan
+        page_text   = page.inner_text("body").lower()
+        notify_me   = bool(re.search(r'notify\s*me', page_text))
+        add_to_cart = bool(re.search(r'add\s*to\s*(cart|bag)', page_text))
+
+        if add_to_cart and not notify_me:
+            in_stock = True
+        elif notify_me:
+            in_stock = False
+        else:
+            # Priority 3: Conservative default — treat as out of stock
+            in_stock = False
+            logger.warning(f"  ⚠️  Could not determine stock for {label} — defaulting OOS.")
+
+    pid    = _extract_pid(url)
+    status = "✅ IN STOCK" if in_stock else "❌ Out of Stock"
+    logger.info(f"  {status} | {name[:60]} | ₹{price or '—'}")
+
+    return {
+        "product_key": _make_key(pid),
+        "product_id":  pid,
+        "name":        name,
+        "url":         url,
+        "price":       price,
+        "brand":       "Watched",
+        "category":    "watched",
+        "in_stock":    in_stock,
+    }
 
 
-if __name__ == "__main__":
-    main()
+# ─── RETRY WRAPPER ────────────────────────────────────────────────────────────
+
+def _with_retry(fn, *args, attempts: int, delay: int, **kwargs):
+    """
+    Call fn(*args, **kwargs) up to `attempts` times.
+    Waits `delay` seconds between each attempt.
+    Returns None if all attempts fail.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            result = fn(*args, **kwargs)
+            if result is not None:
+                return result
+            logger.warning(f"Attempt {attempt}/{attempts} returned None.")
+        except Exception as exc:
+            logger.warning(f"Attempt {attempt}/{attempts} raised: {exc}")
+        if attempt < attempts:
+            time.sleep(delay)
+    logger.error(f"All {attempts} attempts failed for {fn.__name__}.")
+    return None
+
+
+# ─── MAIN RUN ─────────────────────────────────────────────────────────────────
+
+def run(config: AppConfig, db: Database, notifier: Notifier) -> None:
+    """
+    Full scrape cycle:
+      Part 1 — Brand listing pages (Hot Wheels, Majorette)
+      Part 2 — Individual watched product pages
+
+    Alerts fired:
+      • 🆕  New product on listing page   (suppressed on first run)
+      • 🔔  Watched car back in stock
+      • 🔔  Watched car in stock on first sight
+      • ⚠️  Error alert if a scrape fully fails
+    """
+    logger.info("=" * 60)
+    logger.info("FirstCry Tracker — Run started")
+    logger.info("=" * 60)
+
+    new_products:  list[dict] = []
+    back_in_stock: list[dict] = []
+
+    # Detect first run — suppress NEW alerts to avoid spam
+    is_first_run = len(db.get_all_by_category("listing")) == 0
+    if is_first_run:
+        logger.info("⚙️  First run — building baseline. No NEW alerts will fire.")
+
+    with sync_playwright() as pw:
+        browser, page = _launch_browser(pw, config)
+
+        try:
+
+            # ── Part 1: Brand listing pages ───────────────────────────────────
+            for brand, url in LISTING_URLS.items():
+                logger.info(f"\n[LISTING] {brand}")
+
+                products: list[dict] = _with_retry(
+                    scrape_listing, page, brand, url,
+                    attempts=config.retry_attempts,
+                    delay=config.retry_delay,
+                ) or []
+
+                if not products:
+                    notifier.alert_error(
+                        f"Listing scrape failed — {brand}",
+                        Exception("No products returned after all retries."),
+                    )
+                    continue
+
+                for p in products:
+                    existing = db.get_product(p["product_key"])
+
+                    if existing is None:
+                        # Brand-new product on listing page
+                        if not is_first_run:
+                            new_products.append(p)
+                            logger.info(f"  🆕 NEW: {p['name']}")
+                        else:
+                            logger.info(f"  📦 Baseline stored: {p['name']}")
+
+                    elif not existing["in_stock"] and p["in_stock"]:
+                        # Was out of stock — now available
+                        back_in_stock.append(p)
+                        logger.info(f"  🔔 BACK IN STOCK: {p['name']}")
+
+                    elif existing["in_stock"] and not p["in_stock"]:
+                        # Went out of stock — update silently
+                        logger.info(f"  ❌ Now OOS: {p['name']}")
+
+                    db.upsert_product(p)
+
+                time.sleep(2)   # polite pause between brand pages
+
+            # ── Part 2: Watched products ──────────────────────────────────────
+            logger.info("\n[WATCHED PRODUCTS]")
+
+            for label, url in WATCH_PRODUCTS.items():
+                product: dict | None = _with_retry(
+                    scrape_watch_product, page, label, url,
+                    attempts=config.retry_attempts,
+                    delay=config.retry_delay,
+                )
+
+                if product is None:
+                    logger.warning(f"  ⚠️  Skipped after all retries: {label}")
+                    continue
+
+                existing = db.get_product(product["product_key"])
+
+                if existing is None:
+                    # First time this car has been scraped
+                    if product["in_stock"]:
+                        # Already available — alert immediately
+                        back_in_stock.append(product)
+                        logger.info(f"  🔔 FIRST SEEN + IN STOCK: {product['name']}")
+                    else:
+                        # Out of stock on first sight — store baseline silently
+                        logger.info(f"  📦 Baseline OOS: {product['name']}")
+
+                elif not existing["in_stock"] and product["in_stock"]:
+                    # Was out of stock — now back in stock
+                    back_in_stock.append(product)
+                    logger.info(f"  🔔 BACK IN STOCK: {product['name']}")
+
+                elif existing["in_stock"] and not product["in_stock"]:
+                    # Went out of stock — update silently
+                    logger.info(f"  ❌ Now OOS: {product['name']}")
+
+                db.upsert_product(product)
+                time.sleep(config.page_delay)
+
+        finally:
+            browser.close()
+            logger.info("Browser closed.")
+
+    # ── Fire notifications ────────────────────────────────────────────────────
+    notifier.alert_new_products(new_products)
+    notifier.alert_back_in_stock(back_in_stock)
+
+    logger.info(
+        f"\n{'=' * 60}\n"
+        f"Run complete — "
+        f"{len(new_products)} new listing(s) | "
+        f"{len(back_in_stock)} back-in-stock\n"
+        f"{'=' * 60}"
+    )
